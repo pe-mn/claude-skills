@@ -45,9 +45,9 @@ the method and the design invariants that must survive maintenance.
 - **The trace is a TIMELINE, and the ordering settles semantics that no single value
   can.** Captured timestamps across tables reconstruct what the flow actually did, so
   "created" and "processed" stop being a guess. On one collected request:
-  `REQUEST.CREATED_ON` 10:16:59 (submitted) → `PAYMENT_RECEIPT_DETAIL.CREATED_ON`
-  10:25:10 → `FINANCIAL_TRANSACTION.TRANSACTION_DATE` 10:27:53 (posted) →
-  `FT.CREATED_ON` 10:27:55 (row written). Eleven minutes separate submission from
+  `ORDER.CREATED_ON` 10:16:59 (submitted) → `PAYMENT_RECEIPT.CREATED_ON`
+  10:25:10 → `LEDGER_TXN.TRANSACTION_DATE` 10:27:53 (posted) →
+  `LEDGER_TXN.CREATED_ON` 10:27:55 (row written). Eleven minutes separate submission from
   completion, which proves a "processed date" belongs on the transaction and not on
   the request — and distinguishes the business date from the row-insert stamp two
   seconds later. Read the timestamps in order before arguing about a date field.
@@ -62,7 +62,7 @@ the method and the design invariants that must survive maintenance.
 ## The capture technique
 
 Seed the app with **marker-prefixed values** (a recognizable prefix on every
-free-text entry, e.g. `omx_...` — concrete prefixes are per-project/adapter)
+free-text entry, e.g. `mkr_...` — concrete prefixes are per-project/adapter)
 so the parser can tell your test entries from pre-existing data. Picklist and
 date fields can't carry markers — they are matched later by value/decoding.
 
@@ -108,7 +108,7 @@ regenerates the mapping fresh, so any re-parse requires re-running back-fill.
    - Notes are preserved across re-runs keyed by (section, field) — renaming
      a section banner orphans that section's notes; re-derive, don't hand-copy.
    - **Substring false positives**: reconcile's fallback "contained" match will
-     call `omx_x_2` FOUND against a traced `omx_x` — one marker is a prefix of
+     call `mkr_x_2` FOUND against a traced `mkr_x` — one marker is a prefix of
      the other and only a numeric suffix differs. Back-fill has the guard
      ("structured ids never fuzzy-merge"); reconcile does not, so a FOUND
      (partial) on marker values whose siblings differ by a trailing number

@@ -191,7 +191,7 @@ def resolve(child, fkname, fkcols, connected):
             if col in pk_cols.get(parent, []): score += 5
             elif pk_cols.get(parent) and col.endswith("_ID") and col[:-3] == ps: score += 4
         if parent in connected and parent != child: score += 3
-        if ps == "SEC_USER" and fkcols and all(c in ("CREATED_BY", "UPDATED_BY") for c in fkcols): score += 5
+        if "USER" in ps and fkcols and all(c in ("CREATED_BY", "UPDATED_BY") for c in fkcols): score += 5
         if score > 0: scored.append((score, parent))
     scored.sort(key=lambda z: (-z[0], z[1]))
     if not scored: return None, 0, 0, []

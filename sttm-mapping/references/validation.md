@@ -60,9 +60,9 @@ cosmetic. The engagement's settled rules are validated in their
   join path, its sample, its recorded type? A pick can be wrong while everything
   around it is right, and no cross-row lens sees it. Two real slips found this way,
   both a single mis-set cell on an otherwise-correct row:
-  - an association FK picked `REQUEST.REQUEST_NUMBER` while its join path, its
+  - an association FK picked `ORDER.ORDER_NUMBER` while its join path, its
     `NUMBER(20)` type, its numeric sample and its identical twin row all named
-    `REQUEST.APPLICANT_ID`;
+    `ORDER.CUSTOMER_ID`;
   - another picked a bank NAME while its rule, expression, join and sample all named
     `…DETAIL.BANK_ID` — and an FK must carry an id, not a label.
 
@@ -72,7 +72,7 @@ cosmetic. The engagement's settled rules are validated in their
   (`join on DOMAIN_DATA_ID, take DATA_DESC_EN`) and firing on it produced 51
   findings of which ~49 were correct-by-design. **Second, "is this pick an
   identifier?" is a question about TYPE or NAME, never name alone** — numeric ids
-  like `FILE_OWNER` and `MEMS_NOL_TYPE` do not end in `_ID`, while a varchar
+  like `OWNERREF` and `CASETYPECODE` do not end in `_ID`, while a varchar
   `ASSOCIATED_OBJECT_ID` holding `TO_CHAR(REQUEST_ID)` does. Accept either signal.
   Restricted that way the lens returned exactly the two real slips and nothing else.
 
