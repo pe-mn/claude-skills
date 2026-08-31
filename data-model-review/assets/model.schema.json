@@ -1,0 +1,215 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "data-model-review/model.schema.json",
+  "title": "Normalised data model",
+  "description": "The contract between parse_model.py and score_model.py. Any new input adapter emits this shape, and validating against it is what stops an adapter from silently producing a model that scores well because half of it went missing. Absent information is null, never invented: a null nullable flag means 'the input did not say', and checks that depend on it stand down rather than guess. That distinction is the whole reason this file exists.",
+  "type": "object",
+  "required": ["meta", "tables"],
+  "additionalProperties": false,
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["source_format"],
+      "additionalProperties": true,
+      "properties": {
+        "name": {"type": ["string", "null"]},
+        "paradigm": {
+          "description": "Set by the reviewer or the classifier, never guessed by the parser. See references/paradigms.md.",
+          "enum": ["oltp", "dim", "vault", "mendix", "doc", "graph", "semantic", null]
+        },
+        "paradigm_evidence": {
+          "type": ["array", "null"],
+          "items": {"type": "string"},
+          "description": "Why the classifier concluded what it did. Required in the report so the reader can challenge it."
+        },
+        "level": {"enum": ["conceptual", "logical", "physical", "unknown", null]},
+        "dialect": {"type": ["string", "null"]},
+        "source_format": {"type": "string"},
+        "source_files": {"type": ["array", "null"], "items": {"type": "string"}},
+        "has_requirements_doc": {"type": ["boolean", "null"]},
+        "has_diagram": {"type": ["boolean", "null"]},
+        "has_data_profile": {"type": ["boolean", "null"]},
+        "parse_warnings": {
+          "type": ["array", "null"],
+          "items": {"type": "string"},
+          "description": "Anything the parser could not read. These become 'review input gaps' in the report rather than disappearing."
+        }
+      }
+    },
+    "tables": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "columns"],
+        "additionalProperties": false,
+        "properties": {
+          "schema": {"type": ["string", "null"]},
+          "name": {"type": "string"},
+          "kind": {"enum": ["table", "view", "entity", "external", "materialized", null]},
+          "role": {
+            "enum": ["fact", "dimension", "bridge", "hub", "link", "satellite", "lookup", "transaction", "reference", null],
+            "description": "Optional declared role. The paradigm classifier may infer it; a declared value always wins."
+          },
+          "description": {"type": ["string", "null"]},
+          "grain": {"type": ["string", "null"]},
+          "row_count": {"type": ["integer", "null"]},
+          "classification": {"type": ["string", "null"]},
+          "owner": {"type": ["string", "null"]},
+          "retention": {"type": ["string", "null"]},
+          "partitioning": {"type": ["string", "null"]},
+          "persistable": {"type": ["boolean", "null"], "description": "Mendix."},
+          "generalization": {"type": ["string", "null"], "description": "Mendix: the direct parent entity."},
+          "system_members": {
+            "type": ["object", "null"],
+            "description": "Mendix opt-in system members. All default to false in the platform.",
+            "properties": {
+              "createdDate": {"type": "boolean"},
+              "changedDate": {"type": "boolean"},
+              "owner": {"type": "boolean"},
+              "changedBy": {"type": "boolean"}
+            }
+          },
+          "access_rules": {
+            "type": ["array", "null"],
+            "items": {
+              "type": "object",
+              "properties": {
+                "role": {"type": ["string", "null"]},
+                "xpath": {"type": ["string", "null"]},
+                "read": {"type": ["boolean", "null"]},
+                "write": {"type": ["boolean", "null"]}
+              }
+            }
+          },
+          "validation_rules": {
+            "type": ["array", "null"],
+            "description": "Mendix. type is one of Required, Unique, Equals, Range, Regular expression, Maximum length.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "attribute": {"type": "string"},
+                "type": {"type": "string"},
+                "detail": {"type": ["string", "null"]}
+              }
+            }
+          },
+          "primary_key": {"type": ["array", "null"], "items": {"type": "string"}},
+          "unique_constraints": {
+            "type": ["array", "null"],
+            "items": {"type": "array", "items": {"type": "string"}}
+          },
+          "checks": {
+            "type": ["array", "null"],
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {"type": ["string", "null"]},
+                "expression": {"type": ["string", "null"]}
+              }
+            }
+          },
+          "indexes": {
+            "type": ["array", "null"],
+            "items": {
+              "type": "object",
+              "required": ["columns"],
+              "properties": {
+                "name": {"type": ["string", "null"]},
+                "columns": {"type": "array", "items": {"type": "string"}},
+                "unique": {"type": ["boolean", "null"]},
+                "kind": {"type": ["string", "null"]},
+                "where": {
+                  "type": ["string", "null"],
+                  "description": "Partial-index predicate, verbatim. Load-bearing: a partial unique index WHERE deleted_at IS NULL is the remedy for a soft-delete uniqueness problem, while a composite unique index merely including deleted_at is the classic wrong fix (NULLs compare distinct, so it permits unlimited live duplicates). TEM-004 cannot distinguish them without this."
+                }
+              }
+            }
+          },
+          "foreign_keys": {
+            "type": ["array", "null"],
+            "items": {
+              "type": "object",
+              "required": ["columns", "ref_table"],
+              "properties": {
+                "name": {"type": ["string", "null"]},
+                "columns": {"type": "array", "items": {"type": "string"}},
+                "ref_schema": {"type": ["string", "null"]},
+                "ref_table": {"type": "string"},
+                "ref_columns": {"type": ["array", "null"], "items": {"type": "string"}},
+                "on_delete": {"type": ["string", "null"]},
+                "on_update": {"type": ["string", "null"]}
+              }
+            }
+          },
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name"],
+              "additionalProperties": false,
+              "properties": {
+                "name": {"type": "string"},
+                "type": {"type": ["string", "null"], "description": "Verbatim as written in the source, including length/precision."},
+                "length": {"type": ["integer", "null"]},
+                "precision": {"type": ["integer", "null"]},
+                "scale": {"type": ["integer", "null"]},
+                "nullable": {
+                  "type": ["boolean", "null"],
+                  "description": "null means the input did not state it. Nullability checks stand down rather than assume."
+                },
+                "default": {"type": ["string", "number", "boolean", "null"]},
+                "description": {"type": ["string", "null"]},
+                "is_pk": {"type": ["boolean", "null"]},
+                "is_identity": {"type": ["boolean", "null"]},
+                "generated": {"type": ["boolean", "null"]},
+                "expression": {"type": ["string", "null"]},
+                "calculated": {"type": ["boolean", "null"], "description": "Mendix calculated attribute."},
+                "classification": {"type": ["string", "null"], "description": "PII / Confidential / Public, if the source records it."},
+                "used_in": {
+                  "type": ["array", "null"],
+                  "items": {"enum": ["sort", "search", "xpath", "grid", "list", "datacontainer", "filter", "join"]},
+                  "description": "Access-path evidence. Mendix models can supply this; DDL cannot, so index rules that need it stand down."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "enums": {
+      "type": ["array", "null"],
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": {"type": "string"},
+          "values": {"type": ["array", "null"], "items": {"type": "string"}},
+          "description": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "associations": {
+      "type": ["array", "null"],
+      "description": "First-class relationships. Mendix associations and graph edges live here; relational FKs live on the table.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {"type": ["string", "null"]},
+          "parent": {"type": ["string", "null"]},
+          "child": {"type": ["string", "null"]},
+          "multiplicity": {"enum": ["one-to-one", "one-to-many", "many-to-many", null]},
+          "owner": {"enum": ["Default", "Both", null]},
+          "delete_behavior_parent": {"type": ["string", "null"]},
+          "delete_behavior_child": {"type": ["string", "null"]},
+          "delete_behavior": {"type": ["string", "null"]},
+          "storage": {"enum": ["table", "column", null]}
+        }
+      }
+    },
+    "glossary": {
+      "type": ["object", "null"],
+      "description": "term -> definition. Abbreviation findings check against this, so supplying it removes noise rather than hiding defects.",
+      "additionalProperties": {"type": "string"}
+    }
+  }
+}

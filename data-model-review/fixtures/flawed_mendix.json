@@ -1,0 +1,754 @@
+{
+  "_README": [
+    "Fixture: a flawed Mendix domain model, hand-built in the normalised shape.",
+    "",
+    "Hand-built rather than scraped because Mendix has no stable text export of a",
+    "domain model, and a fixture that depends on one version's HTML markup would rot",
+    "silently. This is also the shape a reviewer should build when the HTML adapter",
+    "comes up thin: honest and complete beats scraped and partial.",
+    "",
+    "The point of this fixture is the paradigm boundary. Every relational key and",
+    "integrity rule is NOT_APPLICABLE here, and the Mendix substitutes fire instead:",
+    "identity is a Unique validation rule, requiredness is a Required validation rule,",
+    "orphan risk is delete behaviour, audit is system members, and PascalCase is",
+    "correct rather than a violation.",
+    "",
+    "_expected_to_fire is read by selftest.py."
+  ],
+  "_expected_to_fire": [
+    "DOC-001",
+    "DOC-002",
+    "EVO-003",
+    "GOV-001",
+    "LOC-002",
+    "MDX-001",
+    "MDX-002",
+    "MDX-003",
+    "MDX-004",
+    "MDX-006",
+    "MDX-007",
+    "MDX-008",
+    "MDX-009",
+    "MDX-010",
+    "MDX-011",
+    "MDX-012",
+    "MDX-013",
+    "MDX-014",
+    "MDX-017",
+    "MDX-018",
+    "MDX-019",
+    "MDX-020",
+    "STR-005"
+  ],
+  "meta": {
+    "name": "MembershipDemo (Mendix)",
+    "paradigm": "mendix",
+    "level": "logical",
+    "source_format": "json",
+    "has_requirements_doc": false,
+    "has_diagram": false,
+    "has_data_profile": false,
+    "parse_warnings": [
+      "hand-built fixture: access rules are represented only where they are absent, so MDX-015 is a tier-B judgement here rather than a mechanical finding"
+    ]
+  },
+  "glossary": {},
+  "tables": [
+    {
+      "name": "Party",
+      "kind": "entity",
+      "persistable": true,
+      "description": "A person or organisation known to the system.",
+      "system_members": {
+        "createdDate": true,
+        "changedDate": true,
+        "owner": true,
+        "changedBy": true
+      },
+      "validation_rules": [
+        {
+          "attribute": "PartyReference",
+          "type": "Unique"
+        }
+      ],
+      "columns": [
+        {
+          "name": "PartyReference",
+          "type": "String",
+          "length": 20,
+          "nullable": false
+        },
+        {
+          "name": "FullName",
+          "type": "String",
+          "length": 200,
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "Person",
+      "kind": "entity",
+      "persistable": true,
+      "generalization": "Party",
+      "description": "An individual.",
+      "system_members": {
+        "createdDate": true,
+        "changedDate": true,
+        "owner": false,
+        "changedBy": false
+      },
+      "validation_rules": [],
+      "columns": [
+        {
+          "name": "DateOfBirth",
+          "type": "Date and time",
+          "nullable": true
+        },
+        {
+          "name": "EmiratesID",
+          "type": "String",
+          "length": 20,
+          "nullable": false
+        },
+        {
+          "name": "NameAr",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "Password",
+          "type": "String",
+          "length": 100,
+          "nullable": true
+        },
+        {
+          "name": "CreatedByUser",
+          "type": "String",
+          "length": 100,
+          "nullable": true
+        }
+      ],
+      "access_rules": []
+    },
+    {
+      "name": "Beneficiary",
+      "kind": "entity",
+      "persistable": true,
+      "generalization": "Person",
+      "description": "A person entitled to receive a disbursement.",
+      "system_members": {
+        "createdDate": false,
+        "changedDate": false,
+        "owner": false,
+        "changedBy": false
+      },
+      "validation_rules": [],
+      "columns": [
+        {
+          "name": "EntitlementCode",
+          "type": "String",
+          "length": 30,
+          "nullable": false
+        },
+        {
+          "name": "MonthlyAmount",
+          "type": "Integer",
+          "nullable": false
+        },
+        {
+          "name": "IsSelected",
+          "type": "Boolean",
+          "nullable": true
+        },
+        {
+          "name": "TotalPaidToDate",
+          "type": "Decimal",
+          "nullable": true,
+          "calculated": true,
+          "used_in": [
+            "grid"
+          ]
+        },
+        {
+          "name": "UnusedRatio",
+          "type": "Decimal",
+          "nullable": true,
+          "calculated": true,
+          "used_in": []
+        },
+        {
+          "name": "FullName",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        }
+      ],
+      "access_rules": []
+    },
+    {
+      "name": "SeniorBeneficiary",
+      "kind": "entity",
+      "persistable": true,
+      "generalization": "Beneficiary",
+      "description": null,
+      "system_members": {
+        "createdDate": false,
+        "changedDate": false,
+        "owner": false,
+        "changedBy": false
+      },
+      "validation_rules": [],
+      "columns": [
+        {
+          "name": "CarePlanNote",
+          "type": "String",
+          "length": 500,
+          "nullable": true
+        }
+      ],
+      "access_rules": []
+    },
+    {
+      "name": "membership_file",
+      "kind": "entity",
+      "persistable": true,
+      "description": null,
+      "system_members": {
+        "createdDate": false,
+        "changedDate": false,
+        "owner": false,
+        "changedBy": false
+      },
+      "validation_rules": [],
+      "columns": [
+        {
+          "name": "File_Number",
+          "type": "String",
+          "length": 30,
+          "nullable": false
+        },
+        {
+          "name": "NameEn",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "OpenedDate",
+          "type": "Date and time",
+          "nullable": false
+        },
+        {
+          "name": "PaymentAmount",
+          "type": "Integer",
+          "nullable": false
+        },
+        {
+          "name": "TempSearchField",
+          "type": "String",
+          "length": 100,
+          "nullable": true
+        },
+        {
+          "name": "F01",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F02",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F03",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F04",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F05",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F06",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F07",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F08",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F09",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F10",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F11",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F12",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F13",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F14",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F15",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F16",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F17",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F18",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F19",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F20",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F21",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F22",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F23",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F24",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F25",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F26",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F27",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F28",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F29",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F30",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F31",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F32",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F33",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F34",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F35",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F36",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F37",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F38",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F39",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F40",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F41",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F42",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F43",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F44",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F45",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F46",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F47",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F48",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F49",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F50",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F51",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F52",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F53",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F54",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F55",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F56",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F57",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F58",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F59",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F60",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        },
+        {
+          "name": "F61",
+          "type": "String",
+          "length": 200,
+          "nullable": true
+        }
+      ]
+    },
+    {
+      "name": "Disbursement",
+      "kind": "entity",
+      "persistable": true,
+      "description": null,
+      "system_members": {
+        "createdDate": false,
+        "changedDate": false,
+        "owner": false,
+        "changedBy": false
+      },
+      "validation_rules": [],
+      "indexes": [
+        {
+          "name": "IX_Disbursement_Status_A",
+          "columns": [
+            "StatusCode",
+            "SettledDate"
+          ],
+          "unique": false
+        },
+        {
+          "name": "IX_Disbursement_Status_B",
+          "columns": [
+            "StatusCode",
+            "PaidAmount"
+          ],
+          "unique": false
+        }
+      ],
+      "columns": [
+        {
+          "name": "DisbursementReference",
+          "type": "String",
+          "length": 30,
+          "nullable": false
+        },
+        {
+          "name": "PaidAmount",
+          "type": "Integer",
+          "nullable": false
+        },
+        {
+          "name": "SettledDate",
+          "type": "Date and time",
+          "nullable": false,
+          "used_in": [
+            "sort",
+            "xpath"
+          ]
+        },
+        {
+          "name": "StatusCode",
+          "type": "Enumeration",
+          "nullable": false,
+          "used_in": [
+            "xpath"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "AuditNote",
+      "kind": "entity",
+      "persistable": false,
+      "description": "In-memory holder for a note being composed on screen.",
+      "system_members": {
+        "createdDate": false,
+        "changedDate": false,
+        "owner": false,
+        "changedBy": false
+      },
+      "validation_rules": [],
+      "columns": [
+        {
+          "name": "NoteText",
+          "type": "String",
+          "length": 2000,
+          "nullable": true
+        }
+      ]
+    }
+  ],
+  "enums": [
+    {
+      "name": "ENUM_DisbursementStatus",
+      "values": [
+        "Requested",
+        "Approved",
+        "Paid",
+        "Rejected"
+      ]
+    }
+  ],
+  "associations": [
+    {
+      "name": "Beneficiary_MembershipFile",
+      "parent": "Beneficiary",
+      "child": "membership_file",
+      "multiplicity": "one-to-many",
+      "owner": "Default",
+      "delete_behavior_parent": "Keep associated object(s)",
+      "storage": "table"
+    },
+    {
+      "name": "Beneficiary_MembershipFile_Historic",
+      "parent": "Beneficiary",
+      "child": "membership_file",
+      "multiplicity": "one-to-many",
+      "owner": "Default",
+      "delete_behavior_parent": "Keep associated object(s)",
+      "storage": "table"
+    },
+    {
+      "name": "membership_file_Disbursement",
+      "parent": "membership_file",
+      "child": "Disbursement",
+      "multiplicity": "one-to-many",
+      "owner": "Default",
+      "delete_behavior_parent": "Keep associated object(s)",
+      "storage": "table"
+    },
+    {
+      "name": "Party_Disbursement",
+      "parent": "Party",
+      "child": "Disbursement",
+      "multiplicity": "many-to-many",
+      "owner": "Both",
+      "delete_behavior_parent": "Keep associated object(s)",
+      "storage": "table"
+    }
+  ]
+}

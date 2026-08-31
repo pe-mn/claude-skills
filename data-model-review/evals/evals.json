@@ -1,0 +1,99 @@
+{
+  "skill_name": "data-model-review",
+  "_notes": [
+    "Inputs live in ../../data-model-review-workspace/inputs/ and are stripped copies of",
+    "the fixtures — the fixtures document which rules they should trigger, which is",
+    "exactly what neither arm may see.",
+    "",
+    "Eval 3 is the one that matters most and is the easiest to get wrong. It feeds a",
+    "competently built schema and asks the same question as eval 1. The failure mode",
+    "being tested is not missing defects but inventing them: an unguided review of a",
+    "sound schema tends to produce a page of confident findings because producing",
+    "nothing feels like not having done the work. Restraint is the skill here."
+  ],
+  "evals": [
+    {
+      "id": 1,
+      "name": "oltp-legacy-oracle-review",
+      "prompt": "We're about to migrate our old legacy CRM system and I want a proper design review of the legacy schema first, so I know what we're inheriting. The DDL is at ~/.claude/skills/data-model-review-workspace/inputs/legacy_schema.sql (Oracle). Can you go through it and tell me what's actually wrong with it? I need something I can take to a steering group — so severity-ranked, and I need to be able to defend each point when the original team push back. Save whatever you produce into the outputs folder.",
+      "expected_output": "A severity-ranked review naming the structural defects with citations: the generic DOMAIN_DATA lookup, the EAV table, the polymorphic OWNER_TYPE/OWNER_ID pair, the delimited TAG_LIST, dates and numbers in VARCHAR2, money in FLOAT, EMIRATES_ID and MOBILE as numbers, the plaintext PASSWORD, the soft-delete unique constraint interaction, the surrogate-only CUSTOMER key, missing FK constraints, and the ADDRESS1..3 / SPARE1..2 repeating groups. Should state which paradigm and canon it applied, and what it could not assess from DDL alone.",
+      "files": [
+        "inputs/legacy_schema.sql"
+      ],
+      "assertions": [
+        "States which paradigm was applied (OLTP/relational) and names the canon used",
+        "States explicitly what could not be assessed from DDL alone (e.g. no requirements document, no data profile, no diagram)",
+        "Findings are ranked by severity, with the most serious first",
+        "Identifies DOMAIN_DATA as a single generic lookup table serving every code list",
+        "Identifies CUSTOMER_ATTRIBUTE as an entity-attribute-value structure",
+        "Identifies OWNER_TYPE/OWNER_ID as a polymorphic association that no foreign key can constrain",
+        "Identifies CUSTOMER.TAG_LIST as a delimited list standing in for a relationship",
+        "Identifies at least one date stored in a character type (EVENT_DATE, DEED_HIJRI_DATE or hijri_date)",
+        "Identifies monetary values in FLOAT (CUSTOMER.BALANCE_AMOUNT or payment_txn.amount)",
+        "Identifies EMIRATES_ID and/or MOBILE stored as a number rather than a digit string",
+        "Identifies CUSTOMER.PASSWORD as a credential stored in recoverable form",
+        "Identifies that UQ_CUSTOMER_EMAIL ignores IS_DELETED, so a soft-deleted email cannot be reused",
+        "Identifies that CUSTOMER has a surrogate key with no uniqueness on any business key",
+        "Identifies at least one foreign-key-shaped column with no declared constraint (e.g. REGION_ID)",
+        "Identifies the ADDRESS1..ADDRESS3 repeating group and/or the SPARE1/SPARE2/UDF1 placeholder columns",
+        "Identifies AUDIT_TRAIL_STAGING as having no primary key",
+        "At least 8 findings cite a named external source or standard (author, book, standard number or documented convention)",
+        "Every BLOCKER or highest-severity finding states a concrete failure scenario, not just a rule violation",
+        "Produces a review file in the outputs folder"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "mendix-domain-model-paradigm-routing",
+      "prompt": "Our vendor delivered the Mendix domain model for the membership module and I'm not convinced it's right. I've got it as JSON at ~/.claude/skills/data-model-review-workspace/inputs/membership_domain_model.json. Have a look and tell me whether this is a sound domain model — and be specific about Mendix, not generic database advice, because last time someone reviewed this they gave us a list of missing foreign keys which isn't even a thing in Mendix. Write your findings to the outputs folder.",
+      "expected_output": "A review that recognises the Mendix paradigm and applies Mendix canon: no Unique validation rules (identity undeclared), delete behaviour left at 'Keep associated object(s)', inheritance four levels deep against the MXP009 two-level limit, two associations between the same entity pair, money as Integer instead of Decimal, Password as String instead of Hashed string, system members disabled, CreatedByUser as a String instead of the owner/changedBy association, membership_file breaking PascalCase naming, the 66-attribute entity, TempSearchField as UI state on a persistable entity, and the unused/grid calculated attributes. Must NOT report missing foreign keys or missing primary keys.",
+      "files": [
+        "inputs/membership_domain_model.json"
+      ],
+      "assertions": [
+        "Recognises the model as a Mendix domain model and says so",
+        "Does NOT report missing foreign keys as a finding",
+        "Does NOT report missing primary keys as a finding",
+        "Identifies that no entity declares a Unique validation rule, so business identity is unenforced",
+        "Identifies association delete behaviour left at 'Keep associated object(s)' as an orphan risk",
+        "Identifies the inheritance chain Party > Person > Beneficiary > SeniorBeneficiary as too deep, referencing the two-level guidance or MXP009",
+        "Identifies the two separate associations between Beneficiary and membership_file",
+        "Identifies monetary attributes typed Integer rather than Decimal",
+        "Identifies Person.Password typed String rather than Hashed string",
+        "Identifies that system members (createdDate/changedDate/owner/changedBy) are disabled on entities that need them",
+        "Identifies Person.CreatedByUser as a String where the platform's owner/changedBy association should be used",
+        "Identifies 'membership_file' as breaking Mendix PascalCase/no-underscore entity naming",
+        "Identifies membership_file as having far too many attributes (60+)",
+        "Identifies TempSearchField (or IsSelected) as UI state on a persistable entity",
+        "Identifies at least one calculated-attribute problem (unused, or used in a grid)",
+        "Cites Mendix-specific documentation or named MxAssist rules rather than only generic database advice",
+        "Produces a review file in the outputs folder"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "sound-schema-restraint",
+      "prompt": "Can you review this schema for me? It's the orders-core service, PostgreSQL, at ~/.claude/skills/data-model-review-workspace/inputs/orders_core_schema.sql. I want to know if there's anything genuinely wrong with it before we go to production, and I'd rather have a short honest answer than a long list. Put your review in the outputs folder.",
+      "expected_output": "A short review concluding the schema is fundamentally sound, surfacing three real defects: the composite-rather-than-partial unique index on customer, the missing btree_gist extension the EXCLUDE constraints depend on, and the unconstrained currency_id on child rows. Plus the observation that personal-data columns carry no classification and that DDL cannot express one. Should NOT invent findings about the exclusion constraints, the CHECK-constrained order_status, the deliberate unit_price snapshot, or absent audit columns / FK indexes / documentation.",
+      "files": [
+        "inputs/orders_core_schema.sql"
+      ],
+      "assertions": [
+        "Concludes overall that the schema is fundamentally sound / well-built, rather than presenting it as broadly problematic",
+        "Reports at most 10 distinct findings in total",
+        "REAL DEFECT: identifies that uq_customer_ref_live is a composite unique index on (customer_ref, deleted_at) rather than a partial index, so duplicate customer_ref values are permitted among live rows",
+        "REAL DEFECT: identifies that the EXCLUDE USING gist constraints require CREATE EXTENSION btree_gist, which the script never issues",
+        "REAL DEFECT: identifies that nothing constrains a sales_order_line / order_payment currency_id to match its order header's",
+        "Identifies that personal-data columns (customer.legal_name, customer.contact_email) carry no classification, OR notes that DDL cannot express classification",
+        "Does NOT claim the effective-dated tables lack an overlap guard (both declare EXCLUDE constraints)",
+        "Does NOT claim order_status must become a lookup table without framing it as a trade-off rather than an error",
+        "Does NOT claim sales_order_line.unit_price is redundant duplication (it is a documented deliberate price snapshot)",
+        "Does NOT claim missing audit columns, missing FK indexes, or missing table documentation (all are present)",
+        "Does NOT claim the schema lacks business-key uniqueness (every table declares one)",
+        "The review is short — under roughly 150 lines",
+        "Produces a review file in the outputs folder"
+      ],
+      "_correction_note": "Assertions revised after iteration 1. The original set assumed this schema was clean; the baseline arm proved it was not, finding three real defects the skill's checks had passed. TEM-004 and the index parser were extended in response, and fixtures/sound_oltp.sql was fixed. Iteration 2 must regenerate inputs/orders_core_schema.sql from the corrected fixture, at which point defects 1 and 2 disappear from the input and those two assertions must be dropped again."
+    }
+  ]
+}

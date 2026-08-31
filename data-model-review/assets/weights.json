@@ -1,0 +1,73 @@
+{
+  "_README": [
+    "OUR weights, not Hoberman's. Hoberman's Data Model Scorecard (SRC-HOB-SC) totals",
+    "100 across ten categories, but the per-category allocation is published only",
+    "inside the book and could not be verified during authoring. These numbers are a",
+    "defensible default we chose; they are not the published scorecard. Never present",
+    "them as Hoberman's in a report — say 'weighted with our allocation' and point at",
+    "this file.",
+    "",
+    "Tune them for a given engagement rather than arguing about them: a greenfield",
+    "design review should weight Abstraction and Definitions higher, a pre-load",
+    "readiness review should weight Structure and Data higher.",
+    "",
+    "Categories listed in REQUIRES_EXTERNAL_INPUT (rules.py) are dropped from the",
+    "denominator when their input is absent, rather than scored zero. A model must not",
+    "lose points because the reviewer did not have a requirements document."
+  ],
+  "hoberman": {
+    "Correctness": 15,
+    "Completeness": 12,
+    "Scheme": 5,
+    "Structure": 20,
+    "Abstraction": 10,
+    "Standards": 8,
+    "Readability": 4,
+    "Definitions": 10,
+    "Consistency": 8,
+    "Data": 8
+  },
+  "severity_penalty": {
+    "_README": [
+      "Points deducted from a category per finding, before the category floor at 0.",
+      "BLOCKER is deliberately steep: one finding that loses data should visibly move",
+      "the number, because a scorecard that averages a data-loss defect into",
+      "insignificance is worse than no scorecard.",
+      "Repeat findings of the same rule in one category are damped (see",
+      "score_model.py REPEAT_DAMPING) so that a single systemic issue across 200",
+      "tables does not zero every category on its own."
+    ],
+    "BLOCKER": 8.0,
+    "MAJOR": 3.0,
+    "MINOR": 1.0,
+    "NOTE": 0.25
+  },
+  "repeat_damping": {
+    "_README": [
+      "Nth occurrence of the same rule contributes penalty * damping^(n-1).",
+      "Set to 1.0 to disable damping and let volume dominate."
+    ],
+    "factor": 0.55,
+    "min_contribution": 0.05
+  },
+  "bands": {
+    "_README": [
+      "Tier-B (judged) dimensions are reported as a band, not a decimal, because a",
+      "reviewer's judgement does not carry three significant figures. These are the",
+      "point values a band contributes when it is mapped into the numeric scorecard,",
+      "expressed as a fraction of the category weight retained."
+    ],
+    "STRONG": 1.0,
+    "ADEQUATE": 0.75,
+    "WEAK": 0.4,
+    "ABSENT": 0.0
+  },
+  "grade_scale": {
+    "_README": "Reported alongside the number so a percentage is not read as precision.",
+    "90": "Exemplary — would use as a reference model",
+    "75": "Sound — defects are localised and cheap to fix",
+    "60": "Workable — real rework needed before it carries production data",
+    "40": "Weak — structural problems, not hygiene",
+    "0": "Not fit for purpose as designed"
+  }
+}
