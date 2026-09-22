@@ -184,6 +184,41 @@ returned `0`, so `COUNT` stops counting those cells. It happened to change nothi
 here — but only a before/after snapshot could establish that, which is why the
 rewrite script takes one.
 
+## Cloud-sync co-authoring — how the "your write disappeared" numbers were taken
+
+One generated mapping workbook, ~390 KB, 772 data rows, on a OneDrive path, over
+three weeks. Read from the file's own `docProps/core.xml` and `xl/workbook.xml`
+across ~150 timestamped backups.
+
+| Written by | formulas | `xr:revisionPtr documentId` | conflicts |
+|---|---|---|---|
+| Openpyxl 3.1.5 (weeks 1–3) | 0 | **absent** | **0** |
+| Excel, after a COM recalc was added | 301–303 | present | 3 reverts in one session |
+
+The transition is datable to the minute: the deliverable went **0 → 303 formulas**
+at one build, and that build was the first to end with a COM recalc. Within hours
+the same content existed under **two different `documentId`s** — the competing
+lineages the sync client resolves by discarding one.
+
+**Scale of the resulting loss, and why address-keyed diffing hid it:** the reverted
+file differed from the good build by **683 cells across 153 rows** when keyed on
+the sheet's stable id column. The same comparison keyed on CELL ADDRESS reported
+**19,703 differing cells**, because a rebuild re-sorts rows — 29× overstated, and
+it pointed at the wrong rows entirely. A hand-rolled regex XML reader on the same
+sheet found **192 of 772** ids; openpyxl found all 772.
+
+**Fix, measured:** generating to a non-synced path and publishing once took the
+build from **~10 writes to the synced path down to 1**. Stripping
+`<xr:revisionPtr/>` at the publish boundary produced a file Excel opened with no
+repair dialog, `revisionPtr` **absent**, and every other part byte-identical.
+
+**dxf table drift** (from passing a dxfId where `add_rule` wanted dxf XML): the
+`<dxfs count>` attribute reached **14 with 10 real children**, and cfRules
+referenced **dxfId 12 and 13** — past the end. openpyxl raised `IndexError` on
+load; Excel's repair would have dropped the conditional formatting. Note the
+diagnosis needed an XML parser: a non-greedy regex over `<dxf ... />` truncated at
+the first self-closing child and reported 10 where the attribute said 14.
+
 ## Not measured here
 
 - **LibreOffice** (`soffice`) is not installed on this host, so the generic `xlsx`

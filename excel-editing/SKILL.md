@@ -95,6 +95,11 @@ perfectly good `=IF($I$330="","",$I$330)` inheritance reference. Two rules:
   assert not app.Workbooks.Count                # a fresh instance owns nothing
   ```
   Never iterate `app.Workbooks` to clean up — close only the handles you opened.
+  **`EnsureModule` raises `PermissionError` where site-packages is not writable**
+  (a system-wide Python install, a locked-down environment): it wants to WRITE the
+  generated cache. Fall back to late-bound `DispatchEx` and pass POSITIONAL args
+  only — `Workbooks.Open(path, 0, True)`, never `ReadOnly=True` — because that is
+  precisely the binding that silently fails late-bound.
   The assert is the backstop: anything already open means you are not alone in
   there. And after any named-arg call whose mis-binding would be silent, **assert
   the result** (`sheetnames[-1] == expected`).
@@ -106,6 +111,15 @@ perfectly good `=IF($I$330="","",$I$330)` inheritance reference. Two rules:
 - A `dxf` fill draws from **`bgColor`**, the reverse of a normal cell fill. Set
   only `fgColor` and the rule applies its font colour and no fill at all, silently.
   Use `dxf_fill()`, which sets both.
+- **Never hand `add_rule` a dxfId — it takes the dxf XML and mints the id
+  itself.** Passing the int you got back from `add_dxf` appends that NUMBER as
+  text inside `<dxfs>`, so the `count` attribute advances while the children do
+  not, and every later id is off by the drift. The rules then point PAST THE END
+  of the table: openpyxl raises `IndexError` on load and Excel silently DELETES
+  the conditional formatting when it repairs the file. `add_dxf` now refuses a
+  non-`<dxf>` argument and derives ids from the real child count, but verify the
+  result with a parser, not a regex — assert `count` attribute == number of
+  `<dxf>` children AND `max(dxfId) < len(children)`.
 - **A `cfRule` formula is anchored at the top-left of its `sqref` and re-evaluated
   per cell, so every column reference you did not mean to move needs `$`.** Writing
   `E4="x"` to colour whole rows over `A4:AW651` tests `E4` in column A, `F4` in B,
@@ -185,8 +199,8 @@ column is done when it is indistinguishable from the table it joined.
   already appeared, **do not save from it** — the on-disk file is still intact
   until that save lands, so close it and restore from the pre-edit backup.
 
-- **Freeze panes have two silent ways to kill scrolling — check both whenever a
-  user says "I cannot scroll".** (1) A merged cell crossing the split: a banner
+- **Freeze panes have THREE silent defects — check all three whenever a user
+  reports scrolling or selection behaving oddly.** (1) A merged cell crossing the split: a banner
   merged `A2:G2` above a `freeze_panes = "B5"` vertical split straddles the
   frozen-column boundary and glitches scrolling — freeze rows only (`A5`) when
   full-width banners exist. (2) A frozen pane taller than the window: freezing
@@ -196,6 +210,32 @@ column is done when it is indistinguishable from the table it joined.
   UNREACHABLE (frozen panes never scroll). Sum the frozen rows' heights; keep
   the stack well under ~400pt at 100% zoom, capping payload cells (a query cell
   is COPIED, not read — 60pt is plenty).
+  (3) **The selection anchored OUTSIDE its own pane.** `ws.freeze_panes = "F2"`
+  makes openpyxl emit the pane plus `<selection pane="bottomRight" activeCell="A1"
+  sqref="A1"/>` — naming a cell the bottom-right pane does not contain, because it
+  keeps the default A1 regardless of where the pane starts. Excel has to reconcile
+  that on open. It is invalid-ish rather than fatal, it survives every rebuild, and
+  it is the first thing to eliminate when someone says "the cell I click is not the
+  cell that gets selected". **Anchor each pane's selection at the pane's own
+  top-left:**
+  ```python
+  def fix_pane_selection(ws) -> bool:
+      pane = getattr(ws.sheet_view, "pane", None)
+      if not (ws.freeze_panes and pane and pane.topLeftCell):
+          return False
+      for sel in ws.sheet_view.selection or []:
+          if sel.pane and sel.pane == pane.activePane:      # only the ACTIVE pane
+              sel.activeCell = sel.sqref = pane.topLeftCell
+      return True
+  ```
+  Call it after every `freeze_panes` assignment, in every builder — a fix applied
+  at one of three call sites comes back on the next build from the other two.
+  **For a hand-shaped file you must NOT regenerate** (a baseline whose data has
+  since moved), patch it instead: rewrite that one `<selection>` in
+  `xl/worksheets/sheetN.xml` and copy every other part byte-for-byte with its
+  original `compress_type`. Verified on one such file — 5,170 cells compared, **0
+  differ**, exactly one part's bytes changed, no parts added or removed, clean COM
+  open with no repair prompt.
 - **Uniform tall row heights read as EMPTY rows.** Setting every row of a log to
   one generous height (62pt "so the long ones fit") renders the short entries as
   blank bands the user asks to have "deleted". Fit heights per row from wrapped
@@ -210,11 +250,82 @@ in the copy reads as a regression to the reader, exactly like a lost fill. The
 same goes for row heights and the filter range — replicate the VIEW, not only
 the paint.
 
+**Putting a formula into a GENERATED workbook** — a decision about every reader,
+not just this file
+- **`data_only=True` returns the CACHE, and a file your generator just wrote has
+  none — so every formula cell reads back as `None`.** That is silent: a reader
+  gets a blank where a value should be and reports the row as empty. Measured:
+  adding 148 reference cells to a generated mapping workbook blinded a coverage
+  gate on every one of them, and ~25 other scripts in the same repo read that
+  file the same way. **Count the `data_only=True` readers BEFORE you add the
+  first formula** — the answer decides whether the feature is worth it.
+- **Fix it at the SOURCE, not per reader.** End the generator with one COM open →
+  `CalculateFullRebuild()` → save, so the cache exists and every reader keeps
+  working unchanged. Patching readers one by one guarantees you miss one, and
+  every future reader inherits the trap.
+- **Make the skipped case LOUD.** That recalc step needs Excel, so it will not
+  run everywhere. Non-fatal is right; silent is not — print exactly which
+  downstream outputs are untrustworthy when it is skipped, because the failure
+  it prevents is invisible.
+- **A reader that must never go blind resolves the reference itself.** Reading
+  with `data_only=False` gives you the formula TEXT, which is not a value either:
+  handed `=IF($M$167="","",$M$167)` as if it were data, one gate reported 24
+  false findings, every one a mirror row whose anchor carried identical content
+  and passed. Parse the address out and read the anchor cell. Belt and braces
+  with the recalc, deliberately.
+
+**Writing to a CLOUD-SYNCED path** (OneDrive / SharePoint) — the failure mode is
+that your write silently DISAPPEARS, hours later, and looks like the user's fault
+- **The instant Excel saves a workbook it stamps `xl/workbook.xml` with
+  `<xr:revisionPtr documentId="…"/>`, and on a synced path that turns the file
+  from data into a CO-AUTHORED DOCUMENT.** The sync client then owns its lineage,
+  and a later out-of-band write — an openpyxl save, a zip patch — is a COMPETING
+  lineage it reconciles by DISCARDING. The user gets *"merge conflict — open the
+  unmerged copy"* and your edits are gone. Measured on one workbook: while it was
+  written ONLY by openpyxl it carried **no `revisionPtr` and conflicted zero times
+  in three weeks**; conflicts began the same evening a COM recalc step was added,
+  and the file was soon showing **two different `documentId`s for byte-identical
+  content**.
+- **That makes a COM recalc expensive on a synced path, not just slow.** The
+  recalc above (which every formula in a generated workbook needs) is exactly what
+  performs that first Excel save. Adding one formula therefore has a SECOND cost
+  beyond the `data_only` one: it converts the deliverable into a document Excel
+  and the sync client believe they own.
+- **Fix: generate to a NON-SYNCED working path, run the COM recalc THERE, and
+  publish in ONE guarded, verified write.** Ten writes per build become one, and
+  the Excel session never touches the synced path. Publish means: refuse while
+  anything holds the target, back up, write THROUGH the placeholder (never
+  `os.replace` on a Files-On-Demand path), then re-read and compare decompressed
+  part bytes — the failure this catches is silent.
+- **Strip `<xr:revisionPtr/>` as you publish.** It restores the no-identity
+  property that made the quiet weeks quiet; Excel regenerates the element on its
+  next save, so nothing is lost. Copy every other part through byte-for-byte with
+  its original `compress_type`.
+- **Diagnose with the INTERNAL stamp, never the mtime.** `docProps/core.xml`
+  `dcterms:modified` against the filesystem mtime: **matching** = a real Excel save
+  at that moment; **diverging** (fresh mtime, old internal stamp) = a byte-copy over
+  the file, i.e. a sync-down or a restore. Excel always stamps its own save time,
+  so it cannot produce the second case. **The caveat that makes this a two-part
+  test: a zip patch or openpyxl save does NOT touch `dcterms:modified`, so
+  stamp-ranking is BLIND to script writes** — ranking copies by stamp will happily
+  report "the live file is newest, nothing was lost" when a script's work has just
+  been reverted. Confirm with a value-level diff before concluding anything.
+- **Recovery: Excel stashes the open document** at
+  `%LOCALAPPDATA%\Microsoft\Excel\TemporaryBackupFile\`. During one conflict that
+  stash held the complete build while the live file had been rolled back. Check it
+  BEFORE cloud version history, and copy it out immediately — the folder is
+  transient.
+
 **Formulas that other cells inherit from** (mirror / echo cells)
 - **Never write a target cell that holds a formula.** It is a reference, and a
   literal over it severs the inheritance silently — the value looks right and the
   next edit to the anchor stops propagating. Read the target *without* `data_only`
-  so a formula shows as one, and skip it. Anchor-only writes are sufficient: on one
+  so a formula shows as one, and skip it. `xlsx_patch`'s `value()` CANNOT tell you:
+  it returns the cached RESULT, so a guard written as
+  `str(sh.value(ref)).startswith("=")` reads a mirror cell as ordinary data and
+  is blind on exactly the cells it exists to protect — measured, it reported
+  "no formula cells here" about a column holding 147 of them. Ask
+  `sh.has_formula(ref)`. Anchor-only writes are sufficient: on one
   workbook 17 anchor writes carried 108 edits via 1,998 mirrors.
 - **A bare reference to an EMPTY cell renders `0`, not blank.** `='S'!$A$1` shows
   `0`; `=IF('S'!$A$1="","",'S'!$A$1)` shows blank. Measured: **1,079 spurious
@@ -259,6 +370,11 @@ the paint.
   became literals). Fix by rewriting the zip **without** `xl/calcChain.xml`, and
   strip its `<Override>` from `[Content_Types].xml` *and* its `<Relationship>` from
   `xl/_rels/workbook.xml.rels` — leaving either dangling is its own corruption.
+  **Match that Override with `[^>]*`, not `[^/]*`**: the ContentType value is
+  itself a slash-bearing string
+  (`application/vnd.openxmlformats-officedocument.spreadsheetml.calcChain+xml`),
+  so a `[^/]*` pattern matches nothing and leaves the dangling Override behind
+  while reporting success.
   Excel regenerates the part on open (verified 149/149 afterwards). This is safe for
   the same reason the probe calls calcChain loss benign: it is a cache.
   **Adding** a formula is fine — the new cell is merely absent from the chain.
@@ -279,6 +395,31 @@ the paint.
 - CRC-check the new zip before it replaces anything, and **retry the replace**: a
   virus scanner holds the freshly-written target for a moment (WinError 5), then
   lets go.
+- **A file in a OneDrive folder can refuse `os.replace` FOREVER, and retrying is
+  the wrong response.** Once Files-On-Demand virtualises it the file carries
+  `Attributes: Archive, ReparsePoint`, and OneDrive's filter driver denies a
+  rename-over with the same WinError 5 a scanner produces — but permanently.
+  Measured: 12 retries over 11s, all denied, on a file that was **not locked**.
+  Tell the two apart in one call — if this succeeds, nothing holds the file and
+  no amount of waiting will help:
+  ```powershell
+  [IO.File]::Open($p,'Open','ReadWrite','None')   # OPEN OK => not a lock
+  ```
+  The fix is to stop swapping the directory entry and **write through the
+  placeholder** instead, which OneDrive treats as an ordinary content change:
+  ```python
+  with open(target, "wb") as fh: fh.write(tmp.read_bytes())
+  tmp.unlink()
+  ```
+  `xlsx_patch.save()` now falls back to this automatically after the retries.
+  Do the CRC check first regardless — writing in place has no undo.
+- **A workbook openpyxl produced has NO `xl/sharedStrings.xml`** — every string
+  sits inline — so `shared_string()` raises and the whole patch route used to be
+  unavailable on exactly the files it is safest on. `set_text()` now falls back
+  to `set_inline_text()`, which writes `<is><t xml:space="preserve">`. Keep the
+  `xml:space` attribute: without it a leading or trailing space is stripped on
+  read, and a trailing space can be load-bearing data (`DOCUMENT.EXTERNAL_ID`
+  has a `' '` variant covering 10,136 rows that a trim would silently merge).
 
 **Verifying**
 - **Read back from DISK, not from the session.** An in-session read-back agreed
@@ -298,6 +439,16 @@ the paint.
 - Reconcile counts (rows, controls, CF blocks, validations) against the pre-edit
   backup, keyed on a stable id. **Never verify by screenshot** — see
   `references/formatting.md`.
+- **Diff two versions on a STABLE ID COLUMN, never on cell address.** A rebuild
+  that re-sorts rows makes an address-keyed diff meaningless: one measured run
+  reported **19,703 differing cells** where the truth, keyed on the id column,
+  was **683 across 153 rows**. And read the values with openpyxl — a hand-rolled
+  regex XML reader misparsed the same sheet, finding 192 of 772 ids.
+- **A load failure is not proof YOU broke it.** Some workbooks never full-load in
+  openpyxl (`TypeError`, `IndexError`) although `read_only=True` /
+  `data_only=True` load fine. Before concluding your edit caused it, run the same
+  load against a PRE-EDIT backup: if that fails too, it is pre-existing and you
+  are chasing the wrong thing.
 - **Compare only the cells you WROTE, and print how many you excluded.** Two
   workbooks built from one mapping rarely inherit the same columns, so one value on
   an anchor can legitimately render on 25 cells in one file and 1 in the other — a
@@ -322,6 +473,31 @@ the paint.
   rendering** — a dxf record can look correct while painting nothing (see
   `references/formatting.md` on `bgColor` vs `fgColor`) — and even that only needs
   `DisplayFormat` probed on one row per DISTINCT value, not one per cell.
+
+**Diagnosing a REPORTED rendering symptom** ("the wrong cell gets selected",
+"the highlight is off", "columns look shifted") — the reporter can only describe
+what they see, so the first job is to find out whether the FILE is wrong at all
+- **Ask Excel, do not derive.** Open a COPY in a private instance and have Excel
+  answer: `Range("D10").Select` then read `Selection.Address`; `UsedRange.MergeCells`;
+  `ws.DisplayRightToLeft`; and the laid-out geometry, `Range.Left` / `Range.Width`
+  per column. A grid is self-consistent when `Left(n+1) == Left(n) + Width(n)` for
+  every column — measured on one 45-column sheet spanning 4,605 pt, the cumulative
+  residual was **0.000 pt**, which cleared the file in one step after a morning of
+  plausible theories.
+- **A per-column delta that is IDENTICAL on every column is YOUR bug, not drift.**
+  Deriving pixel widths by hand invites it: Excel's forward conversion
+  `px = Trunc(((256*w + Trunc(128/MDW))/256)*MDW)` includes a 5-pixel padding term,
+  and an inverse that omits it returns a constant offset on every column. That
+  produced a confident "≈2 columns of accumulated drift" which matched the reported
+  symptom almost exactly and was entirely an artifact. Real drift VARIES per column.
+  **A number that confirms the hypothesis this neatly is the one to re-derive before
+  reporting it.**
+- **Rule the file out before proposing a fix to it.** When selection, merges, RTL,
+  geometry and CF anchoring all check out, the remaining causes are client-side —
+  worksheet zoom below 100% combined with OS display scaling or a multi-monitor
+  setup, whose remedy is an Excel *application* option, not a file property. That is
+  why such a symptom survives every rebuild and follows the user across workbooks.
+  Say so plainly rather than shipping another speculative file change.
 
 **When it is slow**
 - **If an operation exceeds ~10s, STOP and time each step** with unbuffered output

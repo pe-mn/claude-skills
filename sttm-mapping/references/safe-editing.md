@@ -176,3 +176,33 @@ Run the integrity checklist from the adapter, typically:
   (the user edits between sessions).
 - If a bad write is discovered late, reconstruct per-column from backups and
   present a diff for approval rather than wholesale rollback.
+
+## 7. The deliverable is a REVIEWED file on a synced drive — never build straight into it
+
+The shape that makes this an STTM problem rather than a generic one: the mapping
+workbook is simultaneously a **generator output** and a **document reviewers keep
+open**, and it usually lives on OneDrive/SharePoint so the client can see it.
+Three writers, one path.
+
+The mechanism, and the fix, are in the `excel-editing` skill under *"Writing to a
+CLOUD-SYNCED path"* — read it before wiring a build. The one-line version: once
+Excel has saved the file it carries a co-authoring identity, and after that any
+generator write is a competing lineage the sync client resolves by **discarding
+it**. Measured on a real engagement: three separate reverts in one session, each
+looking like the reviewer's fault, none of them were.
+
+What this means for the STTM run order:
+
+- **Build to a NON-SYNCED working path; publish to the reviewed location once**,
+  as a deliberate step, with nothing holding the file. A build that ends in a COM
+  recalc (which any workbook carrying formulas needs) must run that recalc on the
+  working copy, never on the synced one.
+- **A harvest reads the PUBLISHED file, a build writes the WORKING one.** Keeping
+  that direction straight is what stops a half-synced revert from being harvested
+  back in as if it were reviewer intent.
+- **When a reviewer says "my changes vanished", check the file's internal
+  `dcterms:modified` against its mtime before believing anyone.** They diverge on a
+  sync-down and match on a real save — but a zip patch updates neither, so pair it
+  with a value-level diff keyed on Mapping_ID.
+- Suspect a revert? The good copy is often in Excel's own
+  `TemporaryBackupFile` folder. Rescue it before anything else.

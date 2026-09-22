@@ -120,6 +120,23 @@ def _checkbox_xfs(styles: str) -> set[int]:
             if CF_XFPB_URI in xf or "xfComplement" in xf}
 
 
+def _freeze(x: str) -> str | None:
+    """`R<rows>/C<cols>` actually frozen, plus the saved scroll cell."""
+    m = re.search(r"<pane[^>]*/?>", x)
+    if not m or "frozen" not in m.group(0):
+        return None
+    y = re.search(r'ySplit="(\d+)"', m.group(0))
+    xs = re.search(r'xSplit="(\d+)"', m.group(0))
+    tl = re.search(r'topLeftCell="([^"]+)"', m.group(0))
+    bits = []
+    if y and y.group(1) != "0":
+        bits.append(f"{y.group(1)} row(s)")
+    if xs and xs.group(1) != "0":
+        bits.append(f"{xs.group(1)} col(s)")
+    out = " + ".join(bits) or "none"
+    return out + (f" (scrolled to {tl.group(1)})" if tl else "")
+
+
 def probe(path: Path, roundtrip: bool = False) -> dict:
     rep: dict = {"file": str(path), "size_bytes": path.stat().st_size,
                  "ext": path.suffix.lower()}
@@ -167,7 +184,13 @@ def probe(path: Path, roundtrip: bool = False) -> dict:
                 "autofilter": (re.search(r'<autoFilter ref="([^"]+)"', x) or [None, None])[1],
                 "hidden_cols": len(re.findall(r'<col[^>]*hidden="1"', x)),
                 "hidden_rows": len(re.findall(r'<row[^>]*hidden="1"', x)),
-                "freeze": (re.search(r'<pane[^>]*topLeftCell="([^"]+)"', x) or [None, None])[1],
+                # THE FREEZE IS ySplit/xSplit, NOT topLeftCell. topLeftCell is
+                # merely where the sheet was last SCROLLED to when it was saved,
+                # so it wanders on every save (A2, A41, A54, A487, A619 all seen
+                # on one file) while the frozen rows never change. Reporting it
+                # as "freeze" made a routine Excel save look like lost layout
+                # and cost a round trip chasing damage that did not exist.
+                "freeze": _freeze(x),
                 "control_cells": bound,
             })
         rep["sheets"] = sheets

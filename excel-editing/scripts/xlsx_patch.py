@@ -207,8 +207,23 @@ class Sheet:
         m = re.search(r'\ss="(\d+)"', el) if el else None
         return m.group(1) if m else None
 
+    def has_formula(self, ref: str) -> bool:
+        """True if the cell holds a FORMULA.
+
+        `value()` cannot answer this — it returns the cached RESULT, so a guard
+        written as `if not str(sh.value(ref)).startswith("=")` is blind and will
+        happily literalise a mirror/echo cell, severing the inheritance silently.
+        Ask here instead, or read with openpyxl `data_only=False`.
+        """
+        el = self.element(ref)
+        return bool(el) and "<f" in el
+
     def value(self, ref: str):
-        """The cell's value, shared strings resolved. For read-back verification."""
+        """The cell's cached VALUE, shared strings resolved. For read-back checks.
+
+        NOT a formula test: a formula cell returns its cached result here, and a
+        freshly generated file has no cache at all. Use `has_formula()`.
+        """
         el = self.element(ref)
         if el is None:
             return None
@@ -257,14 +272,40 @@ class Sheet:
         else:
             self._inserts.setdefault(row, {})[col_index(col)] = el
 
-    def set_text(self, ref: str, text: str) -> None:
-        """Write a STRING via the shared-string table.
+    def set_inline_text(self, ref: str, text: str) -> None:
+        """Write a STRING as an inline `<is><t>` element, no shared-string table.
 
-        Use this for every identifier column. A shared-string cell has no numeric
+        Needed because a workbook openpyxl produced has NO xl/sharedStrings.xml
+        at all — every string sits inline — so `shared_string()` raises and the
+        whole patch route was unavailable on those files. Since openpyxl is what
+        generates most of this project's workbooks, that ruled the patcher out
+        of exactly the files it is safest on.
+
+        Inline strings carry the same protection as shared ones: the cell has no
+        numeric interpretation, so "3.30" cannot become 3.3.
+
+        `xml:space="preserve"` matters — without it a leading or trailing space
+        is stripped on read, and a trailing space is load-bearing data here
+        (DOCUMENT.EXTERNAL_ID has a ' ' variant covering 10,136 rows).
+        """
+        self._write(ref, f'<is><t xml:space="preserve">{_esc(str(text))}'
+                         f'</t></is>', extra_attrs=' t="inlineStr"')
+
+    def set_text(self, ref: str, text: str) -> None:
+        """Write a STRING, via the shared-string table where one exists.
+
+        Use this for every identifier column. A string cell has no numeric
         interpretation, so Excel cannot turn "3.30" into 3.3 or "1:1" into a time
         — the coercion that silently corrupts ids when written through COM.
+
+        Falls back to an inline string when the workbook has no shared-string
+        part rather than raising, so openpyxl-produced files are patchable.
         """
-        idx = self.book.shared_string(str(text))
+        try:
+            idx = self.book.shared_string(str(text))
+        except KeyError:
+            self.set_inline_text(ref, text)
+            return
         self._write(ref, f"<v>{idx}</v>", extra_attrs=' t="s"')
 
     def set_number(self, ref: str, value: float | int) -> None:
@@ -640,14 +681,31 @@ class Book:
         self._sst_new = []
 
     def add_dxf(self, dxf_xml: str) -> int:
-        """Append a differential format; returns its dxfId."""
+        """Append a differential format; returns its dxfId.
+
+        The id comes from the ACTUAL number of <dxf> children, never from the
+        `count` attribute. Trusting the attribute is how a style table drifts:
+        one bad append leaves count ahead of the children, every later id is off
+        by that much, and the cfRules end up pointing PAST THE END of the table.
+        openpyxl then raises IndexError on load and Excel silently DROPS the
+        conditional formatting when it "repairs" the file. Reading the real
+        count also self-heals a table that has already drifted.
+        """
+        if not isinstance(dxf_xml, str) or not dxf_xml.lstrip().startswith("<dxf"):
+            raise TypeError(
+                "add_dxf() takes <dxf> XML (e.g. dxf_font('FF808080')), not "
+                f"{type(dxf_xml).__name__} {dxf_xml!r}. Sheet.add_rule() takes the "
+                "SAME XML and mints the dxfId for you — passing an id you got back "
+                "from add_dxf appends that number as text inside <dxfs>, so the "
+                "count advances while the children do not.")
         part = "xl/styles.xml"
         xml = self._text(part)
-        m = re.search(r'<dxfs count="(\d+)">', xml)
+        m = re.search(r'<dxfs count="(\d+)"\s*>(.*?)</dxfs>', xml, re.S)
         if m:
-            n = int(m.group(1))
-            xml = xml.replace(m.group(0), f'<dxfs count="{n + 1}">', 1)
-            xml = xml.replace("</dxfs>", f"{dxf_xml}</dxfs>", 1)
+            body = m.group(2)
+            n = len(re.findall(r"<dxf[ >]", body))        # ACTUAL children, not the attr
+            xml = (xml[:m.start()] + f'<dxfs count="{n + 1}">{body}{dxf_xml}</dxfs>'
+                   + xml[m.end():])
         elif re.search(r'<dxfs count="0"\s*/>', xml):
             n = 0
             xml = re.sub(r'<dxfs count="0"\s*/>', f'<dxfs count="1">{dxf_xml}</dxfs>',
@@ -699,6 +757,27 @@ class Book:
                 return target
             except PermissionError:
                 if attempt == 11:
-                    raise
+                    break
                 time.sleep(1)
-        return target
+
+        # STILL DENIED AFTER 12 TRIES — this is NOT a transient hold, and the
+        # retry advice does not apply. Measured 2026-09-03: a file inside a
+        # OneDrive folder carries `Attributes: Archive, ReparsePoint` once
+        # Files-On-Demand has virtualised it, and os.replace() onto a reparse
+        # point is refused by OneDrive's filter driver — WinError 5 — even
+        # though the file is NOT locked and opens cleanly for ReadWrite. The
+        # diagnosis that matters: if `[IO.File]::Open(path,'Open','ReadWrite',
+        # 'None')` succeeds, nothing holds the file and no amount of retrying
+        # will help.
+        #
+        # Writing THROUGH the placeholder works, because it is a content change
+        # rather than a directory-entry swap. The CRC check above has already
+        # passed, so the bytes are known good before they land.
+        try:
+            with open(target, "wb") as fh:
+                fh.write(tmp.read_bytes())
+        except OSError:
+            raise
+        else:
+            tmp.unlink(missing_ok=True)
+            return target
