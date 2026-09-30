@@ -1,0 +1,15 @@
+sql-queries - NOTICE
+
+This skill is a Derivative Work of the "sql-queries" skill shipped in Anthropic's "data" plugin
+(marketplace anthropics/knowledge-work-plugins, plugin `data` version 1.1.0, author: Anthropic),
+licensed under the Apache License, Version 2.0. A copy of that license is the LICENSE file beside
+this NOTICE. The upstream plugin ships no NOTICE file of its own.
+
+MODIFIED 2026-09-30 (Apache License 2.0, section 4(b)):
+- SKILL.md keeps the upstream body verbatim and in its original order, and adds a merged trigger
+  description, the "SQL query estate" method (sections 1-6, the loop, the checklist, the reference
+  table and the retrospective), an Oracle section in the dialect reference, an Oracle list under
+  "Error Handling and Debugging", and a "Many facts in one statement" pattern.
+- references/query-estate.md, references/running-queries.md and references/wide-query-shapes.md are
+  the author's own work, merged from the author's former query-estate skill (retired to a pointer on
+  2026-09-30); they are not part of the upstream Work.

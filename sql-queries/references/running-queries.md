@@ -86,6 +86,19 @@ merely written — a distinction that is invisible a week later.
   nulls — subtract them before concluding a column is numeric.
 - **ORA-01489 result of string concatenation is too long** — `LISTAGG` past 4000 bytes.
   See `wide-query-shapes.md` §2.
+- **ORA-04036 PGA memory used by the instance exceeds PGA_AGGREGATE_LIMIT — on a SMALL table.** Nested
+  "step" views (one level normalises, the next extracts, the next classifies) are MERGED by the optimizer, which
+  replaces every column reference with its whole defining expression. A classifier naming a derived column 13
+  times, over a level naming the one below 16 times, over one naming the base 4 times, compiles to ~830 copies
+  of the base expression: compile-time memory, whatever the row count (5,300 rows failed). Make every level
+  UNMERGEABLE - select `ROWNUM AS nm1_` in it - or write the steps as CTEs referenced more than once (the
+  optimizer materialises those). A `/*+ NO_MERGE */` hint works too, unless the pipeline strips comments on the
+  way to the runner: check before relying on one. Oracle cancels the calls of the sessions holding the most
+  untunable memory, and on a shared production instance the incident lands in the DBA's alert log.
+- **When a resource error repeats, diagnose by SHAPE before size.** Send the cheapest real query first, then
+  diff the structure of the passing and the failing statements. "The instance is full" is not a conclusion
+  while one shape fails and another, heavier one passes - and splitting a statement changes nothing when the
+  cost is per-statement compilation, not rows.
 - **ORA-00933 / ORA-00911** on a channel that takes one statement — almost always a
   trailing semicolon or a second statement, not a syntax error in what you wrote.
 - **NULL fall-through in a negated predicate.** `NOT REGEXP_LIKE(col, …)` and `col NOT IN

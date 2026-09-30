@@ -162,8 +162,8 @@ def _selftest():
          "58 Case Closure / ###) AND X", "REQUEST_TYPE_ID", {"48", "58"}),
         ("DOCUMENT.EXTERNAL_ID = 'SERVICE_FILE' AND X",
          "EXTERNAL_ID", {"SERVICE_FILE"}),
-        ("DOCUMENT.EXTERNAL_ID IN ('request', 'paymentReceipts')",
-         "EXTERNAL_ID", {"request", "paymentReceipts"}),
+        ("DOCUMENT.EXTERNAL_ID IN ('request', 'receipts')",
+         "EXTERNAL_ID", {"request", "receipts"}),
         ("NOTE.NOTE_TYPE_ID = 21002 (User)", "NOTE_TYPE_ID", {"21002"}),
         # boundary guard: DOMAIN_TYPE_ID must NOT register as any discriminator, and a
         # status filter must not register as identity

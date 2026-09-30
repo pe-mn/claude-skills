@@ -351,9 +351,18 @@ deliverable — it forces the right questions.
     - **`READY` must mean *parses and executes*, not *mapped*.** Gate the flag on a
       real parse, and on `ROWS_OUT = COUNT(DISTINCT <legacy key>)` for the output.
       That single equality catches the whole grain-defect class.
+      **The LAST gate for a ruling that changes an extract's SQL shape is the shipped text itself:** read it
+      byte for byte out of the deliverable (re-join any chunked literal), wrap it as a flat count - rows vs
+      distinct legacy keys, a shape class per changed column, the classes that must be 0 - and run it on the
+      source, one heavy extract per statement. Measured: a parse check, the golden baselines and a clean build
+      all passed a reseed whose nested step views the source then refused at COMPILE time (sql-queries
+      skill, running-queries.md: ORA-04036); only the as-shipped count caught it before the load did.
     - **`EXPECTED_VOLUME` is a claim to be recomputed from the repaired query**, never
       the raw table count. Measured corrections: 1,295 against a stored ~6, and ~554
       against a stored 1,516,197 (the unfiltered row count of a shared child table).
+      A ruling that changes an extract's SCOPE or GRAIN invalidates it the same way: a staff filter left one
+      entity at the whole login table (4,018 for 327), one-row-per-person left another at the whole person
+      table (60,628 for 739) - the expectation is a dependent of the ruling, not of the table.
     - Run the eight extract lenses (E1–E8) in
       [references/validation.md](references/validation.md) → *The extract audit* the
       first time any stored query executes, and again after every source re-pick.
@@ -696,6 +705,10 @@ orchestrates:
   in-flight state on the board, stop it, take the work over from the artefacts on disk.
 - **Default = solo, no fan-out.** Never launch a workflow or agent fleet without an explicit
   yes for THIS task; a second session is the user's fan-out, not yours.
+- **Hand a separate workstream to a FRESH session.** When the follow-ups are different workstreams, offer each
+  as its own session with a SELF-CONTAINED brief - board first, the popup / show-before-writing rules, the
+  rulings with their register ids, every file path and evidence file, the privacy rule - instead of carrying
+  them in a long session; then post on the board that this session holds nothing.
 
 ## 3b. Evidence and confidence — what you looked at vs what you claim
 
@@ -877,6 +890,9 @@ Every retraction in that session came from reading a PROXY instead of the thing:
   wrong — and a stale register does not announce itself.
 - **Retract in one line and move on.** "I said X; measured, it is Y" costs a
   sentence. Defending it costs the reader's trust in everything else.
+- **A value typed into an offline check is SYNTHETIC.** Label it as such in the output and never carry it into
+  a message: a test input quoted as a measurement ("93 holders, 60 surnames" when the real paste said 92
+  names) is a fabrication even when the conclusion it supports holds.
 
 ### A COUNT IS NOT A REFERENT — establish what the counted rows ARE before judging them
 Two peer-session conclusions reversed in one afternoon (2026-09-09), both the same shape:
@@ -916,6 +932,11 @@ Three ways a correct-looking write goes wrong, all measured:
   the key was wrong. **After applying a class rule, list its members and check
   each individually** — a rule that is right for 30 of 33 rows is a defect in 3,
   not a success in 30.
+- **A VALUE rule is swept by the SOURCE column it reads, never by the attribute it is named after.** A
+  normalisation ruled for a national identifier (strip the separators) was wired to the three attributes NAMED
+  for it and missed ten role attributes (owner id, applicant id, beneficiary id ...) carrying the same recovery
+  expression. Grep every expression for the source columns - in every module, and in the SHIPPED extracts -
+  before calling the rule applied.
 
 Find where the generator sets the column, and what invalidates it. If it is
 derived, fix the derivation — that is the difference between a fix that survives
@@ -925,6 +946,11 @@ the next rebuild and one that does not.
 
 An audit that passes is a claim about your CHECKS, not about the mapping. Ask what
 the check is physically able to see before you report that nothing is wrong.
+
+A clean EXIT CODE is the same kind of claim about a build: a builder that exits 0 can still print defect
+notes. Grep its log for every severity word it uses (NOTE / DEFECT / WARN), not only error|traceback -
+eighteen 'undefined relation' notes (a checker misreading `TRIM(BOTH x FROM y)` as a table) went unread for
+a whole rebuild.
 
 Measured, 2026-09-06: five gap classes had run green over 65 defective cells for
 weeks. Every one of them — `PROFILE_MISSING`, `SAMPLE_MISSING`, `NO_EVIDENCE`,
@@ -1314,6 +1340,6 @@ Same-quality latency rules:
 | [references/lineage-diff.md](references/lineage-diff.md) | The user asks whether recent changes lost anything, or to check a deliverable against its backups |
 | [references/best-practices.md](references/best-practices.md) | Designing a new workbook layout; challenging an existing one; industry conventions & anti-patterns |
 | [references/inheritance.md](references/inheritance.md) | The target model has generalisation/specialisation (Mendix, supertype/subtype): map-once rule, shared PK/FK ID, parent-scope-⊇-children rule, safe collapse of duplicated rows |
-| [references/source-system-window.md](references/source-system-window.md) | You get time-boxed access to the legacy database. Deriving the query pack from open mapping cells (it is usually ~10% the size you expect), making every query name the cells it settles, and applying what comes back. **The general craft of interrogating a database — wide-query shapes, the paste-back contract, Oracle round-trip killers, the two-phase environment protocol, and keeping a query estate — moved to the `sql-query-estate` skill; load that alongside this one whenever you are about to write SQL against the source.** |
+| [references/source-system-window.md](references/source-system-window.md) | You get time-boxed access to the legacy database. Deriving the query pack from open mapping cells (it is usually ~10% the size you expect), making every query name the cells it settles, and applying what comes back. **The general craft of interrogating a database — wide-query shapes, the paste-back contract, Oracle round-trip killers, the two-phase environment protocol, and keeping a query estate — moved to the `sql-queries` skill; load that alongside this one whenever you are about to write SQL against the source.** |
 | `scripts/check_parent_scope.py` | Mechanical check that every generalisation parent's extraction scope subsumes the union of its children's — run it whenever a hierarchy's filters change |
 | the project's own learnings/engagement log (adapter-side) | Phase G. Read it when you need the history of a specific decision — **not** by default: these logs reach tens of thousands of tokens and are the single largest avoidable context cost on an STTM task |

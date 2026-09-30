@@ -1,9 +1,9 @@
 # Wide query shapes — carrying many facts in one statement
 
-Substitute your own schema and table names. The migration-control names here are real —
-`EMS2_TGT` (a landing schema), `MIG_MASTER_TABLE` (the driver table) and `MIG_TABLE_LOG`
+Substitute your own schema and table names. The migration-control names here are generic
+stand-ins — `TGT` (a landing schema), `CONTROL_TABLE` (the driver table) and `RUN_LOG`
 (the run log) — because a skeleton reads better against a concrete driver than against a
-placeholder, and these are infrastructure rather than anyone's data. The business tables
+placeholder; a real engagement's names belong in its project adapter, never in this skill. The business tables
 (`SRC.ORDERS`, `SRC.CUSTOMER`, `SRC.SHIPMENT`) are invented stand-ins.
 
 Engagement-specific facts — which control row carries which patch, what a particular count
@@ -25,23 +25,23 @@ means.
 SELECT 'A ROWS ARMED'          AS CHK,
        TO_CHAR(COUNT(*))       AS N,
        NVL(LISTAGG(ID, ' ') WITHIN GROUP (ORDER BY ID), 'none') AS DETAIL
-  FROM EMS2_TGT.MIG_MASTER_TABLE WHERE TRIM(ACTIVE_FLAG) = '1'
+  FROM TGT.CONTROL_TABLE WHERE TRIM(ACTIVE_FLAG) = '1'
 UNION ALL
 SELECT 'B ARMED OUTSIDE KNOWN RANGE', TO_CHAR(COUNT(*)),
        NVL(LISTAGG(ID, ' ') WITHIN GROUP (ORDER BY ID), 'none')
-  FROM EMS2_TGT.MIG_MASTER_TABLE
+  FROM TGT.CONTROL_TABLE
  WHERE TRIM(ACTIVE_FLAG) = '1' AND ID NOT BETWEEN 1000 AND 1999
 UNION ALL
 SELECT 'C TARGET TABLE MISSING', TO_CHAR(COUNT(*)),
        NVL(LISTAGG(m.TARGET_TABLE, ' ') WITHIN GROUP (ORDER BY m.ID), 'none')
-  FROM EMS2_TGT.MIG_MASTER_TABLE m
+  FROM TGT.CONTROL_TABLE m
  WHERE TRIM(m.ACTIVE_FLAG) = '1'
    AND NOT EXISTS (SELECT 1 FROM ALL_TABLES t
                     WHERE t.OWNER = m.TARGET_SCHEMA AND t.TABLE_NAME = m.TARGET_TABLE)
 UNION ALL
 SELECT 'D RUN STILL OPEN', TO_CHAR(COUNT(*)),
        NVL(LISTAGG(TO_CHAR(ID), ' ') WITHIN GROUP (ORDER BY ID), 'none')
-  FROM EMS2_TGT.MIG_TABLE_LOG WHERE STATUS = 'In Progress'
+  FROM TGT.RUN_LOG WHERE STATUS = 'In Progress'
 ORDER BY 1
 ```
 
@@ -69,7 +69,7 @@ SELECT 'A GUARD CLAUSE REMOVED' AS CHK,
        CASE WHEN EXTRACT_QUERY LIKE '%SOME_FRAGMENT%'
             THEN 'FAIL - reverted' ELSE 'PASS' END AS VERDICT,
        'len=' || TO_CHAR(LENGTH(EXTRACT_QUERY)) AS DETAIL
-  FROM EMS2_TGT.MIG_MASTER_TABLE WHERE ID = 9001
+  FROM TGT.CONTROL_TABLE WHERE ID = 9001
 UNION ALL ...
 ```
 
@@ -147,7 +147,7 @@ SELECT 'rows=' || TO_CHAR(COUNT(*))
     || ' dupes='    || TO_CHAR(COUNT(*) - COUNT(DISTINCT NATURAL_KEY))
     || ' nulls='    || TO_CHAR(COUNT(CASE WHEN NATURAL_KEY IS NULL THEN 1 END))
        AS RESULT
-  FROM EMS2_TGT.ORDERS
+  FROM TGT.ORDERS
 ```
 
 **`dupes` is the point, not `rows`.** A total alone cannot see duplication: if two parents
@@ -174,17 +174,17 @@ SELECT t.TABLE_NAME,
             WHEN x.PHYS = 0          THEN 'C EMPTY'
             ELSE                          'B MISMATCH' END AS VERDICT
   FROM ALL_TABLES t
-  LEFT JOIN EMS2_TGT.MIG_MASTER_TABLE m
-         ON m.TARGET_TABLE = t.TABLE_NAME AND TRIM(m.TARGET_SCHEMA) = 'EMS2_TGT'
+  LEFT JOIN TGT.CONTROL_TABLE m
+         ON m.TARGET_TABLE = t.TABLE_NAME AND TRIM(m.TARGET_SCHEMA) = 'TGT'
   LEFT JOIN (SELECT TABLE_NAME,
                     MAX(LOADED_ROWS) KEEP (DENSE_RANK LAST ORDER BY RUN_ID) AS EXPECTED
-               FROM EMS2_TGT.MIG_TABLE_LOG WHERE STATUS = 'Success' GROUP BY TABLE_NAME) l
+               FROM TGT.RUN_LOG WHERE STATUS = 'Success' GROUP BY TABLE_NAME) l
          ON l.TABLE_NAME = TRIM(m.SOURCE_SCHEMA) || '.' || TRIM(m.OBJECT_NAME),
        XMLTABLE('/ROWSET/ROW'
                 PASSING XMLTYPE(DBMS_XMLGEN.GETXML(
-                          'SELECT COUNT(*) C FROM EMS2_TGT."' || t.TABLE_NAME || '"'))
+                          'SELECT COUNT(*) C FROM TGT."' || t.TABLE_NAME || '"'))
                 COLUMNS PHYS NUMBER PATH 'C') x
- WHERE t.OWNER = 'EMS2_TGT'
+ WHERE t.OWNER = 'TGT'
    AND t.TABLE_NAME LIKE 'STG\_%' ESCAPE '\'
  ORDER BY t.TABLE_NAME
 ```
@@ -218,8 +218,8 @@ a load: what matched, what never ran, what is empty, what disagrees.
 ```sql
 SELECT 'child=' || TO_CHAR(COUNT(*))
     || ' orphans=' || TO_CHAR(COUNT(CASE WHEN p.ID IS NULL THEN 1 END)) AS RESULT
-  FROM EMS2_TGT.SHIPMENT c
-  LEFT JOIN EMS2_TGT.ORDERS p ON TO_CHAR(p.ID) = TO_CHAR(c.ORDER_ID)
+  FROM TGT.SHIPMENT c
+  LEFT JOIN TGT.ORDERS p ON TO_CHAR(p.ID) = TO_CHAR(c.ORDER_ID)
 ```
 
 `TO_CHAR` on both sides is not paranoia: landed columns are frequently a different type or
@@ -234,7 +234,7 @@ SELECT 'ORDERS' AS T, COUNT(*) AS N,
        RTRIM(CASE WHEN COUNT(ORDER_NO)  = 0 THEN 'ORDER_NO '  END ||
              CASE WHEN COUNT(CUSTOMER_ID)= 0 THEN 'CUSTOMER_ID ' END ||
              CASE WHEN COUNT(TOTAL)     = 0 THEN 'TOTAL '     END) AS ALL_NULL_COLUMNS
-  FROM EMS2_TGT.ORDERS
+  FROM TGT.ORDERS
 ```
 
 **Did anything truncate at the declared width?** Rows sitting *exactly* on the declared
@@ -245,7 +245,7 @@ SELECT 'ORDERS.NOTES' AS COL, 200 AS CUT_AT, COUNT(*) AS N,
        COUNT(NOTES) AS POPULATED,
        SUM(CASE WHEN LENGTH(NOTES) = 200 THEN 1 ELSE 0 END) AS AT_THE_LIMIT,
        MAX(LENGTH(NOTES)) AS MAX_LEN
-  FROM EMS2_TGT.ORDERS
+  FROM TGT.ORDERS
 ```
 
 **Were decimals preserved?** A pipeline that silently rounds looks identical to a source
@@ -255,7 +255,7 @@ with no decimals — until you compare:
 SELECT 'rows=' || TO_CHAR(COUNT(*))
     || ' with_decimals=' || TO_CHAR(COUNT(CASE WHEN AMOUNT <> ROUND(AMOUNT, 0) THEN 1 END))
     || ' max=' || TO_CHAR(MAX(AMOUNT)) AS RESULT
-  FROM EMS2_TGT.ORDERS
+  FROM TGT.ORDERS
 ```
 
 ---
@@ -268,7 +268,7 @@ than asking for it repeatedly:
 ```sql
 SELECT m.OBJECT_NAME AS T, c.n AS SEQ,
        SUBSTR(m.BIG_TEXT, (c.n - 1) * 600 + 1, 600) AS CHUNK
-  FROM EMS2_TGT.MIG_MASTER_TABLE m
+  FROM TGT.CONTROL_TABLE m
  CROSS JOIN (SELECT LEVEL n FROM DUAL CONNECT BY LEVEL <= 7) c
  WHERE m.ID IN (9001, 9002)
    AND (c.n - 1) * 600 < LENGTH(m.BIG_TEXT)
@@ -294,10 +294,45 @@ SELECT ID,
        (LENGTH(BIG_TEXT) - LENGTH(REPLACE(BIG_TEXT, '(', '')))
      - (LENGTH(BIG_TEXT) - LENGTH(REPLACE(BIG_TEXT, ')', ''))) AS PAREN_BALANCE,
        CASE WHEN BIG_TEXT LIKE '%EXPECTED_FRAGMENT%' THEN 'PRESENT' ELSE 'ABSENT' END AS FRAG
-  FROM EMS2_TGT.MIG_MASTER_TABLE WHERE ID IN (9001, 9002) ORDER BY ID
+  FROM TGT.CONTROL_TABLE WHERE ID IN (9001, 9002) ORDER BY ID
 ```
 
 Paren balance catches a whole class of malformed edit that a length comparison misses.
 Fingerprinting a whole range at once — `LISTAGG(ID || ':' || LENGTH(t) || ':' ||
 SUBSTR(STANDARD_HASH(t, 'MD5'), 1, 8))` — compares the live state against a generated file
 in one row, and catches a same-length different-text edit that length alone cannot.
+
+## 8. Verifying a shipped extract as it will run
+
+The statement a loader will run is itself the thing to test - a parser, a catalogue check and a clean build all
+passed an extract the source then refused. Read it out of the deliverable byte for byte (re-join a chunked
+literal, un-double its quotes), then wrap it as ONE flat row of counts:
+
+```sql
+SELECT 'Customer extract' AS ITEM, COUNT(*) AS ROWS_, COUNT(DISTINCT KEY_) AS KEYS_,
+       SUM(CASE WHEN PC = 'empty'  THEN 1 ELSE 0 END) AS PH_EMPTY,
+       SUM(CASE WHEN PC = 'mobile' THEN 1 ELSE 0 END) AS PH_MOBILE,
+       SUM(CASE WHEN PC = 'OTHER'  THEN 1 ELSE 0 END) AS PH_OTHER          -- must be 0
+  FROM (SELECT x.SRC_ID AS KEY_,
+               CASE WHEN x.PHONE IS NULL THEN 'empty'
+                    WHEN REGEXP_LIKE(x.PHONE, '^[+]9715[0-9]{8}$') THEN 'mobile'
+                    ELSE 'OTHER' END AS PC
+          FROM (/* the extract, verbatim */) x)
+```
+
+`ROWS_ = KEYS_` proves no join added a row; each changed column gets its shape classes, with the ones that must
+be zero named; no value leaves the database. Keep it one flat row per extract and one heavy extract per
+statement: GROUPING SETS or UNPIVOT around a heavy extract add work for nothing (and some checkers misread
+UNPIVOT's IN list). Split an extract into its pieces only to LOCATE a failure, then run the whole again.
+
+## 9. A value dive that respects the requester's masking
+
+"Shown when 5+ records share it" is not enough for contact values: a requester masked real mailboxes that ~90
+customers shared. Show an address by value only when it cannot identify anyone - a generic role word as the
+local part (info, admin, office, sales ...) or a test spelling; show every other one as a masked shape (letters
+-> L, THEN digits -> N) plus its domain, with its holder count and how related the holders are (distinct
+surnames, distinct national ids, companies among them, how many have another usable value). Those four counts
+separate a test or agency address (many unrelated holders) from a family's shared one (few surnames) and from one
+person recorded twice (one national id). A requester's own masks (`email1@...`) are placeholders, never data:
+never write one into code, a rule or a client text as if it were a value.
+

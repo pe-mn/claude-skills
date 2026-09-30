@@ -37,8 +37,8 @@ second row — it is one column with a **discriminated expression** on the paren
 ```sql
 Request.ProcessedDate =
   CASE <subtype>
-    WHEN 'RevenuePayment'            THEN FINANCIAL_TRANSACTION.TRANSACTION_DATE
-    WHEN 'RecordTransferredRevenues' THEN REQUEST.UPDATED_ON
+    WHEN 'Payment'                   THEN LEDGER_TXN.TRANSACTION_DATE
+    WHEN 'RevenueTransfer'           THEN REQUEST.UPDATED_ON
     ELSE                                  REQUEST.REQUEST_DATE
   END
 ```

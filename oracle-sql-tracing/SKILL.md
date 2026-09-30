@@ -45,7 +45,7 @@ the method and the design invariants that must survive maintenance.
 - **The trace is a TIMELINE, and the ordering settles semantics that no single value
   can.** Captured timestamps across tables reconstruct what the flow actually did, so
   "created" and "processed" stop being a guess. On one collected request:
-  `ORDER.CREATED_ON` 10:16:59 (submitted) → `PAYMENT_RECEIPT.CREATED_ON`
+  `ORDER.CREATED_ON` 10:16:59 (submitted) → `RECEIPT.CREATED_ON`
   10:25:10 → `LEDGER_TXN.TRANSACTION_DATE` 10:27:53 (posted) →
   `LEDGER_TXN.CREATED_ON` 10:27:55 (row written). Eleven minutes separate submission from
   completion, which proves a "processed date" belongs on the transaction and not on

@@ -470,3 +470,17 @@ value domains, referential keys) had passed.
    timestamp. Re-fingerprint immediately before a run, not once per analysis.
 10. **Registers dated to a staging copy do not size production.** Stamp every count the client will act on with its
     environment; a quality rule quoting a staging figure will fail post-load for the wrong reason.
+
+## Post-load implementation lessons (2026-09-22 implementation, anonymised)
+* **Inheritance and liveness:** when a parent entity carries the delete state (Status/Active column) and its specialisations do not, the
+  children's extracts must not filter the deleted rows either — otherwise a deleted document has a parent row saying Deleted and no child row.
+  Derive the child's state-carrying tables from the parent (model note "specializes X.Y"), do not hard-code per child.
+* **Per-entity overlay lists are a layer above the mapping store.** A pass that rewrites a filter for named entities will silently undo a ruling
+  written to the store; when a ruled cell does not appear in the built workbook, look for the list before doubting the store.
+* **Hand-SQL overrides live in the composer's own form** (placeholders, comments, quoted aliases) and pin the hash of the text they replace.
+  When a ruling moves that text, re-derive: fold the new composer text the same way, prove the SELECT list is unchanged, splice the new WHERE.
+* **Control-column byte ceilings are real:** a scope change added 177 bytes and pushed one control row past a 4,000-byte VARCHAR2; recover
+  bytes by inlining a lookup minimally (two columns, provably the same id assignment) rather than by dropping predicates.
+* **Replay idempotency test:** apply → dry-run → 0 changed. History lines that embed current store state, or state-conditional repairs, break it.
+* **Register gates:** an evidence sheet that must equal the union of two item lists refuses silently-added rows — read the builder's assertion
+  before adding rows, and never leave a row only in the workbook (a regeneration deletes it).

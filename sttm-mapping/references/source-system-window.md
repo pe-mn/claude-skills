@@ -1,6 +1,6 @@
 # Deriving the query pack from the mapping
 
-> **The general craft of interrogating a database lives in the `sql-query-estate` skill,
+> **The general craft of interrogating a database lives in the `sql-queries` skill,
 > not here.** Load it for: writing the widest statement that still answers the question,
 > the shapes that carry many facts in one statement, the paste-back contract and query
 > numbering, the Oracle errors that each cost a round trip, why no environment is a
@@ -59,7 +59,7 @@ change are already named — you are not re-deriving why the query mattered from
 ## 3. Applying what comes back
 
 - **Fix the mapping against the values, re-measure against the aggregates**, and stamp
-  environment and date on both. See the two-phase protocol in `sql-query-estate`.
+  environment and date on both. See the two-phase protocol in `sql-queries`.
 - **Apply findings as a patch proposal the user approves**, never a direct write to the
   workbook.
 - **A mapping change invalidates its dependants.** A Source edit does not stand alone —
@@ -67,4 +67,4 @@ change are already named — you are not re-deriving why the query mattered from
   that row are all now stale. Sweep them in the same pass.
 - **Record the result where the next session will find it**, not in the conversation. An
   answer that exists only in a chat log gets asked for again; that is what the query
-  estate in `sql-query-estate` exists to prevent.
+  estate in `sql-queries` exists to prevent.
